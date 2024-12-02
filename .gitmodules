@@ -1,0 +1,3 @@
+[submodule "social_sim_unity/Assets/ExternalAssets/Microsoft-Rocketbox"]
+	path = social_sim_unity/Assets/ExternalAssets/Microsoft-Rocketbox
+	url = https://github.com/yale-img/Microsoft-Rocketbox.git
