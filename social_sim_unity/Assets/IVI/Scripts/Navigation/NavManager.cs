@@ -13,6 +13,7 @@ namespace IVI
         public GroupNavNode[] allGroupNodes;
         public NavEdge[] allEdges;
         public INavigable[] allAgents;
+        public INavigable[] allAgentsSorted;
         public Dictionary<NavNode, int> node2Index;
         public Dictionary<NavNode, int> groupNode2Index;
         public bool[,] adjMatrix;
@@ -32,14 +33,14 @@ namespace IVI
         public GameObject nodesGO;
         public GameObject edgesGO;
         public GameObject agentsGO;
+        public GameObject agentPrefab;
 
+        public const int MAX_SPAWN = 15;
         public const float NODE_RADIUS = 1;
         public const float EDGE_HEIGHT = 0.5f;
         public const float EDGE_WIDTH = 1f;
         public bool VISUALIZE = true;
         public float SPAWN_HEIGHT = 0;
-
-        public GameObject agentPrefab;
 
         void Awake()
         {
@@ -74,39 +75,36 @@ namespace IVI
             #region Spawn Agents
 
             int j = 0;
-            foreach (var node in allNavNodes)
+            for (int i = 0; i < allNavNodes[1].spawnCount; i++)
             {
-                for (int i = 0; i < node.spawnCount; i++)
+                var theta = Mathf.PI * 2 * Random.value;
+                var pos = allNavNodes[1].transform.position + new Vector3(Mathf.Sin(theta), SPAWN_HEIGHT, Mathf.Cos(theta)) * Random.value * allNavNodes[1].radius;
+                var sfRandom = Instantiate(agentPrefab, pos, Quaternion.identity);
+                var agent = sfRandom.GetComponentInChildren<INavigable>();
+                agent.name = "Agent_" + j++;
+                agent.transform.parent = agentsGO.transform;
+                if (j > MAX_SPAWN - 1)
                 {
-                    var theta = Mathf.PI * 2 * Random.value;
-                    var pos = node.transform.position + new Vector3(Mathf.Sin(theta), SPAWN_HEIGHT, Mathf.Cos(theta)) * Random.value * node.radius;
-                    var sfRandom = Instantiate(agentPrefab, pos, Quaternion.identity);
-                    var agent = sfRandom.GetComponentInChildren<INavigable>();
-                    agent.name = "Agent_" + j++;
-                    agent.transform.parent = agentsGO.transform;
+                    break;
                 }
             }
 
             allGroupNodes = GameObject.FindObjectsOfType<GroupNavNode>();
 
-            foreach (GroupNavNode node in allGroupNodes)
+            for (int i = 0; i< allGroupNodes[0].spawnCount; i++)
             {
-                for (int i = 0; i < node.spawnCount; i++)
+                if (!allGroupNodes[0].CanAddMember)
                 {
-                    if (!node.CanAddMember)
-                    {
-                        break;
-                    }
-                    var sfRandom = Instantiate(agentPrefab, Vector3.zero, Quaternion.identity);
-                    var agent = sfRandom.GetComponentInChildren<INavigable>();
-                    agent.name = "Agent_" + j++;
-                    (float, Vector3) pose = node.AddMember(agent);
-                    float degRot = pose.Item1 * (180 / Mathf.PI);
-                    //print(agent.name + " rad: " + pose.Item1 + " : deg : " + degRot);
-                    agent.transform.rotation = Quaternion.Euler(0, degRot, 0);
-                    agent.transform.position = pose.Item2;
-                    agent.transform.parent = agentsGO.transform;
+                    break;
                 }
+                var sfRandom = Instantiate(agentPrefab, Vector3.zero, Quaternion.identity);
+                var agent = sfRandom.GetComponentInChildren<INavigable>();
+                agent.name = "Agent_" + j++;
+                (float, Vector3) pose = allGroupNodes[0].AddMember(agent);
+                float degRot = pose.Item1 * (180 / Mathf.PI);
+                agent.transform.rotation = Quaternion.Euler(0, degRot, 0);
+                agent.transform.position = pose.Item2;
+                agent.transform.parent = agentsGO.transform;
             }
             yield return null;  // Allow the agents to spawn
 
@@ -114,9 +112,11 @@ namespace IVI
 
             allEdges = GameObject.FindObjectsOfType<NavEdge>();
             allAgents = GameObject.FindObjectsOfType<INavigable>();
+            allAgentsSorted = allAgents.OrderByDescending(pedestrian => pedestrian.transform.position.z).ToArray();
             node2Index = new Dictionary<NavNode, int>();
             groupNode2Index = new Dictionary<NavNode, int>();
             adjMatrix = new bool[allNavNodes.Length, allNavNodes.Length];
+
             #region Initialize Graph
 
             for (int i = 0; i < allNavNodes.Length; i++)
@@ -169,13 +169,23 @@ namespace IVI
 
             #region Start Navigation
 
-            foreach (var agent in allAgents)
+            System.Random randomInt = new System.Random();
+            int maxJaywalkers = randomInt.Next(1, MAX_SPAWN+1);
+            Debug.Log("Maximum Number of Jaywalkers: " + maxJaywalkers);
+
+            yield return new WaitForSeconds(5);
+
+            int jaywalkCount = 0;
+            foreach (INavigable agent in allAgentsSorted)
             {
-                if (agent.tag == GroupNavNode.MemberTag)
-                {
-                    continue;
-                }
+                if (agent.tag == GroupNavNode.MemberTag) continue;
+
                 yield return UpdateAgentGoal(agent);
+
+                jaywalkCount++;
+                if (jaywalkCount == maxJaywalkers) break;
+
+                yield return new WaitForSeconds(2);
             }
 
             #endregion
